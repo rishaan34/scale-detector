@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sing to Detect Key</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Sing and Detect the Key of Your Song</h1>
+    <button id="startButton">Start Singing</button>
+    <p id="result">Press the button and sing...</p>
+
+    <script>
+        let audioContext, analyser, microphone, scriptProcessor;
+        const noteFrequencies = [
+            { note: "C", freq: 261.63 }, { note: "C#", freq: 277.18 }, { note: "D", freq: 293.66 },
+            { note: "D#", freq: 311.13 }, { note: "E", freq: 329.63 }, { note: "F", freq: 349.23 },
+            { note: "F#", freq: 369.99 }, { note: "G", freq: 392.00 }, { note: "G#", freq: 415.30 },
+            { note: "A", freq: 440.00 }, { note: "A#", freq: 466.16 }, { note: "B", freq: 493.88 }
+        ];
+
+        const scales = {
+            "C Major": ["C", "D", "E", "F", "G", "A", "B"],
+            "G Major": ["G", "A", "B", "C", "D", "E", "F#"],
+            "D Major": ["D", "E", "F#", "G", "A", "B", "C#"],
+            "A Major": ["A", "B", "C#", "D", "E", "F#", "G#"],
+            "E Major": ["E", "F#", "G#", "A", "B", "C#", "D#"],
+            "B Major": ["B", "C#", "D#", "E", "F#", "G#", "A#"],
+            "F Major": ["F", "G", "A", "A#", "C", "D", "E"]
+        };
+
+        function getClosestNote(freq) {
+            let closestNote = noteFrequencies.reduce((prev, curr) =>
+                Math.abs(curr.freq - freq) < Math.abs(prev.freq - freq) ? curr : prev
+            );
+            return closestNote.note;
+        }
+
+        function determineScale(detectedNotes) {
+            let bestMatch = { scale: "Unknown", matchCount: 0 };
+            for (let scale in scales) {
+                let matchCount = detectedNotes.filter(n => scales[scale].includes(n)).length;
+                if (matchCount > bestMatch.matchCount) {
+                    bestMatch = { scale, matchCount };
+                }
+            }
+            return bestMatch.scale;
+        }
+
+        document.getElementById("startButton").addEventListener("click", async function () {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                
+                scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+                analyser.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+                
+                let detectedNotes = [];
+
+                scriptProcessor.onaudioprocess = function (event) {
+                    let buffer = event.inputBuffer.getChannelData(0);
+                    let frequencyData = new Float32Array(analyser.frequencyBinCount);
+                    analyser.getFloatFrequencyData(frequencyData);
+                    
+                    let maxIndex = frequencyData.indexOf(Math.max(...frequencyData));
+                    let frequency = audioContext.sampleRate * maxIndex / analyser.fftSize;
+                    
+                    if (frequency > 60 && frequency < 1000) {
+                        let note = getClosestNote(frequency);
+                        detectedNotes.push(note);
+                    }
+                };
+
+                setTimeout(() => {
+                    scriptProcessor.disconnect();
+                    let scale = determineScale(detectedNotes);
+                    document.getElementById("result").innerText = "Detected Key: " + scale;
+                }, 5000);
+            }
+        });
+    </script>
+
+</body>
+</html>
